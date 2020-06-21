@@ -14,6 +14,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 #[cfg(feature = "std")]
 pub mod genesis;
 
+use check_membership::{loose as check_membership_loose, tight as check_membership_tight};
 use frame_system as system;
 use sp_api::impl_runtime_apis;
 use sp_core::{OpaqueMetadata, H256};
@@ -25,7 +26,6 @@ use sp_runtime::{
 	ApplyExtrinsicResult, MultiSignature,
 };
 use sp_std::prelude::*;
-use check_membership::{ loose as check_membership_loose, tight as check_membership_tight };
 
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
@@ -346,6 +346,16 @@ impl simple_map::Trait for Runtime {
 	type Event = Event;
 }
 
+impl matrix_factorization::Trait for Runtime {
+	type Event = Event;
+	const NUM_ITEMS: usize = 16;
+	const EMBEDDING_DIM: usize = 64;
+	const FRACTIONAL_BITS: u32 = 24;
+	const INITIAL_RND_AMPLITUDE: i64 = 1 << 10;
+	const PRIOR_PRECISION: i64 = 1 << 24;
+	const LIKELIHOOD_PRECISION: i64 = 3 << 23;
+}
+
 impl single_value::Trait for Runtime {}
 
 impl storage_cache::Trait for Runtime {
@@ -397,6 +407,7 @@ construct_runtime!(
 		SimpleCrowdfund: simple_crowdfund::{Module, Call, Storage, Event<T>},
 		SimpleEvent: simple_event::{Module, Call, Event},
 		SimpleMap: simple_map::{Module, Call, Storage, Event<T>},
+		MatrixFactorization: matrix_factorization::{Module, Call, Storage, Event<T>},
 		SingleValue: single_value::{Module, Call, Storage},
 		StorageCache: storage_cache::{Module, Call, Storage, Event<T>},
 		StructStorage: struct_storage::{Module, Call, Storage, Event<T>},
