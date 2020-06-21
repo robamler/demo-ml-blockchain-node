@@ -1,0 +1,44 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run kitchen node",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"run",
+				"-p",
+				"kitchen-node",
+				"--",
+				"--dev",
+				"-lruntime=debug"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Run kitchen node in release mode",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"run",
+				"--release",
+				"-p",
+				"kitchen-node",
+				"--",
+				"--dev"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Check kitchen node",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"check",
+				"-p",
+				"kitchen-node"
+			],
+			"problemMatcher": []
+		}
+	]
+}
