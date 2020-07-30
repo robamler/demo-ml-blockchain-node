@@ -174,14 +174,18 @@ decl_module! {
 					|(((nu, precmu), prec), mean_i)| (nu - precmu) * mean_i / prec
 				).sum();
 
-			dbg!((&user, item, prediction));
-			// def prediction(item, user):
-			// 	   mu_j = (nu_u[user, :] - np.sum(offdiagonal_precisions[user, :, :] * mu_i, axis=0)) / precision_uu[user, :]
-			// 	   return mu_i[item, :].dot(mu_j)
+			debug::info!("user {:?}; item {}; prediction {}", &user, item, prediction);
+
 			Self::deposit_event(RawEvent::PredictionObtained(user, item, prediction));
 			Ok(())
 		}
 	}
+}
+
+fn make_vec<T: Clone>(value: T, len: usize) -> Vec<T> {
+	let mut vec = Vec::with_capacity(len);
+	vec.resize(len, value);
+	vec
 }
 
 impl<T: Trait> Module<T> {
@@ -197,7 +201,7 @@ impl<T: Trait> Module<T> {
 				(rnd * T::INITIAL_RND_AMPLITUDE) >> 31
 			});
 
-			let item_precisions = vec![T::PRIOR_PRECISION; len];
+			let item_precisions = make_vec(T::PRIOR_PRECISION, len);
 
 			(item_means, item_precisions)
 		}
@@ -211,9 +215,9 @@ impl<T: Trait> Module<T> {
 		if <Module<T> as Store>::QUser::contains_key(user) {
 			<Module<T> as Store>::QUser::get(user)
 		} else {
-			let natural_parameter = vec![0i64; T::EMBEDDING_DIM as usize];
-			let precision_uu = vec![T::PRIOR_PRECISION; T::EMBEDDING_DIM as usize];
-			let offdiagonal_precisions = vec![0i64; (T::EMBEDDING_DIM * T::NUM_ITEMS) as usize];
+			let natural_parameter = make_vec(0i64, T::EMBEDDING_DIM as usize);
+			let precision_uu = make_vec(T::PRIOR_PRECISION, T::EMBEDDING_DIM as usize);
+			let offdiagonal_precisions = make_vec(0i64, (T::EMBEDDING_DIM * T::NUM_ITEMS) as usize);
 
 			(natural_parameter, precision_uu, offdiagonal_precisions)
 		}
@@ -284,12 +288,12 @@ impl<T: Trait> Module<T> {
 			.map(|((nu, precmu), prec)| ((nu - precmu) << T::FRACTIONAL_BITS) / prec)
 			.collect::<Vec<i64>>();
 
-		let mut mat = vec![0i64; (T::EMBEDDING_DIM * T::EMBEDDING_DIM) as usize];
-		let mut vec = vec![0i64; T::EMBEDDING_DIM as usize];
+		let mut mat = make_vec(0i64, (T::EMBEDDING_DIM * T::EMBEDDING_DIM) as usize);
+		let mut vec = make_vec(0i64, T::EMBEDDING_DIM as usize);
 
 		for iteration in 0..30 {
 			let prediction = Self::dot(&opt_user_j, &opt_item_i);
-			dbg!((iteration, prediction));
+			debug::info!("iteration {}: prediction = {}", iteration, prediction);
 
 			// Solve for opt_user_j
 			let mut mat_iter = mat.iter_mut();
@@ -322,7 +326,8 @@ impl<T: Trait> Module<T> {
 					+ natural_parameter1 - other_correlations1
 			}
 
-			std::mem::replace(&mut opt_user_j, Self::lin_solve(mat.clone(), &vec));
+			let new_opt_user_j = Self::lin_solve(mat.clone(), &vec);
+			opt_user_j.clone_from(&new_opt_user_j);
 
 			// Solve for opt_item_i
 			let mut mat_iter = mat.iter_mut();
@@ -353,7 +358,8 @@ impl<T: Trait> Module<T> {
 					>> T::FRACTIONAL_BITS;
 			}
 
-			std::mem::replace(&mut opt_item_i, Self::lin_solve(mat.clone(), &vec));
+			let new_opt_item_i = Self::lin_solve(mat.clone(), &vec);
+			opt_item_i.clone_from(&new_opt_item_i);
 		}
 
 		(opt_item_i, opt_user_j, other_correlations)
@@ -403,17 +409,30 @@ impl<T: Trait> Module<T> {
 
 	fn swap_rows(matrix: &mut [i64], a: usize, b: usize) {
 		let K = T::EMBEDDING_DIM as usize;
+		let (a, b) = if a < b {
+			(a, b)
+		} else {
+			(b, a)
+		};
 		if a != b {
-			unsafe {
-				let row_a =
-					std::slice::from_raw_parts_mut(matrix.as_mut_ptr().offset((K * a) as isize), K);
-				let row_b =
-					std::slice::from_raw_parts_mut(matrix.as_mut_ptr().offset((K * b) as isize), K);
-
-				for (x, y) in row_a.into_iter().zip(row_b.into_iter()) {
-					std::mem::swap(x, y);
-				}
+			let (head, tail) = matrix.split_at_mut((K*b) as usize);
+			let row_a = &mut head[(K*a) as usize..(K*(a+1)) as usize];
+			let row_b = &mut tail[0..K];
+			for (a_i, b_i) in row_a.iter_mut().zip(row_b.iter_mut()){
+				let tmp = *a_i;
+				*a_i = *b_i;
+				*b_i = tmp;
 			}
+			// unsafe {
+			// 	let row_a =
+			// 		std::slice::from_raw_parts_mut(matrix.as_mut_ptr().offset((K * a) as isize), K);
+			// 	let row_b =
+			// 		std::slice::from_raw_parts_mut(matrix.as_mut_ptr().offset((K * b) as isize), K);
+
+			// 	for (x, y) in row_a.into_iter().zip(row_b.into_iter()) {
+			// 		std::mem::swap(x, y);
+			// 	}
+			// }
 		}
 	}
 
@@ -436,7 +455,7 @@ impl<T: Trait> Module<T> {
 
 	fn back_substitution(m: &[i64], y: Vec<i64>) -> Vec<i64> {
 		let K = T::EMBEDDING_DIM as usize;
-		let mut x = vec![0i64; K];
+		let mut x = make_vec(0i64, K);
 
 		unsafe {
 			for i in (0..K).rev() {
