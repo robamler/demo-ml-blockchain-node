@@ -6,7 +6,7 @@ use frame_support::{
 	debug, decl_error, decl_event, decl_module, decl_storage,
 	dispatch::{DispatchResult, Vec},
 };
-use frame_system::{self as system, ensure_signed};
+use frame_system::ensure_signed;
 use rand_xoshiro::{
 	rand_core::{RngCore, SeedableRng},
 	Xoshiro256PlusPlus,
@@ -15,8 +15,8 @@ use rand_xoshiro::{
 #[cfg(test)]
 mod tests;
 
-pub trait Trait: system::Trait {
-	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+pub trait Config: frame_system::Config {
+	type Event: From<Event<Self>> + Into<<Self as frame_system::Config>::Event>;
 	const NUM_ITEMS: usize;
 	const EMBEDDING_DIM: usize;
 	const FRACTIONAL_BITS: u32;
@@ -32,7 +32,7 @@ pub trait Trait: system::Trait {
 // }
 
 decl_storage! {
-	trait Store for Module<T: Trait> as MatrixFactorization {
+	trait Store for Module<T: Config> as MatrixFactorization {
 		QItem get(fn get_raw_q_item): Option<(Vec<i64>, Vec<i64>)>;
 		QUser: map hasher(blake2_128_concat) T::AccountId => (Vec<i64>, Vec<i64>, Vec<i64>);
 	}
@@ -41,7 +41,7 @@ decl_storage! {
 decl_event!(
 	pub enum Event<T>
 	where
-		AccountId = <T as system::Trait>::AccountId,
+		AccountId = <T as frame_system::Config>::AccountId,
 	{
 		/// A user has submitted a rating.
 		RatingSubmitted(AccountId, u64, i32),
@@ -52,7 +52,7 @@ decl_event!(
 );
 
 decl_error! {
-	pub enum Error for Module<T: Trait> {
+	pub enum Error for Module<T: Config> {
 		/// The rated or requested item does not exist.
 		ItemDoesNotExist,
 	}
@@ -68,7 +68,7 @@ decl_error! {
 // }
 
 decl_module! {
-	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+	pub struct Module<T: Config> for enum Call where origin: T::Origin {
 
 		// Initialize errors
 		type Error = Error<T>;
@@ -188,7 +188,7 @@ fn make_vec<T: Clone>(value: T, len: usize) -> Vec<T> {
 	vec
 }
 
-impl<T: Trait> Module<T> {
+impl<T: Config> Module<T> {
 	fn get_q_item() -> (Vec<i64>, Vec<i64>) {
 		if let Some(raw_q_item) = Self::get_raw_q_item() {
 			raw_q_item

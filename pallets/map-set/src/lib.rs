@@ -3,12 +3,14 @@
 //! A pallet that implements a storage set on top of a storage map and demonstrates performance
 //! tradeoffs when using vec sets.
 
-use frame_support::{decl_error, decl_event, decl_module, decl_storage, dispatch::DispatchResult, ensure};
-use frame_system::{self as system, ensure_signed};
-use frame_support::storage::IterableStorageMap;
-use sp_std::prelude::*;
-use sp_std::collections::btree_set::BTreeSet;
 use account_set::AccountSet;
+use frame_support::storage::IterableStorageMap;
+use frame_support::{
+	decl_error, decl_event, decl_module, decl_storage, dispatch::DispatchResult, ensure,
+};
+use frame_system::ensure_signed;
+use sp_std::collections::btree_set::BTreeSet;
+use sp_std::prelude::*;
 
 #[cfg(test)]
 mod tests;
@@ -16,17 +18,14 @@ mod tests;
 /// A maximum number of members. When membership reaches this number, no new members may join.
 pub const MAX_MEMBERS: u32 = 16;
 
-pub trait Trait: system::Trait {
-	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+pub trait Config: frame_system::Config {
+	type Event: From<Event<Self>> + Into<<Self as frame_system::Config>::Event>;
 }
 
 decl_storage! {
-	trait Store for Module<T: Trait> as VecMap {
-		// The set of all members. The bool value is a workaround and will always be
-		// `true`. It would be nicer to map to `()`, but `()` is encoded as 0 bytes. The
-		// underlying storage cannot distinguish between keys with 0-byte values and keys
-		// not present in the map.
-		Members get(fn members): map hasher(blake2_128_concat) T::AccountId => bool;
+	trait Store for Module<T: Config> as MapSet {
+		//Currently we map to '()' because '()' is not encoded anymore as 0 bytes and the underlying storage
+		Members get(fn members): map hasher(blake2_128_concat) T::AccountId => ();
 		// The total number of members stored in the map.
 		// Because the map does not store its size internally, we must store it separately
 		MemberCount: u32;
@@ -36,7 +35,7 @@ decl_storage! {
 decl_event!(
 	pub enum Event<T>
 	where
-		AccountId = <T as system::Trait>::AccountId,
+		AccountId = <T as frame_system::Config>::AccountId,
 	{
 		/// Added a member
 		MemberAdded(AccountId),
@@ -46,7 +45,7 @@ decl_event!(
 );
 
 decl_error! {
-	pub enum Error for Module<T: Trait> {
+	pub enum Error for Module<T: Config> {
 		/// Cannot join as a member because you are already a member
 		AlreadyMember,
 		/// Cannot give up membership because you are not currently a member
@@ -57,7 +56,7 @@ decl_error! {
 }
 
 decl_module! {
-	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+	pub struct Module<T: Config> for enum Call where origin: T::Origin {
 		fn deposit_event() = default;
 
 		type Error = Error<T>;
@@ -76,7 +75,7 @@ decl_module! {
 			ensure!(!Members::<T>::contains_key(&new_member), Error::<T>::AlreadyMember);
 
 			// Insert the new member and emit the event
-			Members::<T>::insert(&new_member, true);
+			Members::<T>::insert(&new_member, ());
 			MemberCount::put(member_count + 1); // overflow check not necessary because of maximum
 			Self::deposit_event(RawEvent::MemberAdded(new_member));
 			Ok(())
@@ -98,12 +97,11 @@ decl_module! {
 	}
 }
 
-impl<T: Trait> AccountSet for Module<T> {
+impl<T: Config> AccountSet for Module<T> {
 	type AccountId = T::AccountId;
 
 	fn accounts() -> BTreeSet<T::AccountId> {
-		<Members::<T> as IterableStorageMap<T::AccountId, bool>>
-			::iter()
+		<Members<T> as IterableStorageMap<T::AccountId, ()>>::iter()
 			.map(|(acct, _)| acct)
 			.collect::<BTreeSet<_>>()
 	}
